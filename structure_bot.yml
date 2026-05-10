@@ -1,0 +1,12 @@
+services:
+  pochbot:
+    image: ghcr.io/helloteamplz/eve-structure-timers-ocr:latest
+    container_name: structure_bot
+    restart: unless-stopped
+    environment:
+      - discbot=${discbot}
+      - channel_id=${channel_id}
+      - TZ=UTC
+    volumes:
+      - ./data:/app/data
+

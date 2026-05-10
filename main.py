@@ -14,9 +14,8 @@ env_path = Path(".") / ".env"
 load_dotenv(dotenv_path=env_path)
 
 #static keys
-timer_channel_id = os.environ.get("channel_id")
 api_key = os.environ.get("discbot")
-timer_response_channel = int(os.environ.get("CHANNEL_ID"))
+timer_response_channel = int(os.environ.get("channel_id"))
 timer_dict_glob = {}
 
 bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
