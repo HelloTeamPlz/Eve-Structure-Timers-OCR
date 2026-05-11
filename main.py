@@ -17,6 +17,7 @@ load_dotenv(dotenv_path=env_path)
 api_key = os.environ.get("discbot")
 timer_response_channel = int(os.environ.get("channel_id"))
 timer_dict_glob = {}
+timer_message_id = None
 
 bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
 
@@ -179,40 +180,76 @@ async def bulk_timer(ctx, *args):
       
 @tasks.loop(seconds=5)
 async def remove_expired_timers():
+    global timer_message_id
+
     response_channel = bot.get_channel(timer_response_channel)
 
-    # Get the current UTC time
+    if response_channel is None:
+        response_channel = await bot.fetch_channel(timer_response_channel)
+
     current_unix_time = sb.unix_time_now()
 
-    # Create a copy of keys to remove
-    keys_to_remove = [key for key in timer_dict_glob if (key + 3600) < current_unix_time]
+    keys_to_remove = [
+        key for key in list(timer_dict_glob.keys())
+        if (key + 3600) < current_unix_time
+    ]
 
-    # Remove the keys with timestamps that have passed
+    if not keys_to_remove:
+        return
+
     for key in keys_to_remove:
-        del timer_dict_glob[key]
+        timer_dict_glob.pop(key, None)
 
-    if keys_to_remove:
-        # If keys were removed, send a message and purge the channel
-        await response_channel.purge(limit=2)
-        sorted_timers = dict(sorted(timer_dict_glob.items(), reverse=True))
-        timers_msg = '\n'.join([f'> {value} <t:{key}:f> in <t:{key}:R> ID: {key}' for key, value in sorted_timers.items()])
-        txt_msg = '\n'.join([f'{key}:{value}'for key,value in sorted_timers.items()])
-        sb.write_to_timers_txt(txt_msg)
+    sorted_timers = dict(sorted(timer_dict_glob.items(), reverse=True))
 
-        if not timer_dict_glob:
-            # If the dictionary is empty, send a default message
-            default_msg = "There are no active timers."
-            await response_channel.send(content=default_msg)
-        else:
-            # Sort the remaining timers by timestamp
-            sorted_timers = dict(sorted(timer_dict_glob.items(), reverse=True))
+    txt_msg = '\n'.join(
+        [f'{key}:{value}' for key, value in sorted_timers.items()]
+    )
+    sb.write_to_timers_txt(txt_msg)
 
-            # Create a message with the remaining timers
-            timers_msg = '\n'.join([f'> {value} <t:{key}:f> in <t:{key}:R> ID: {key}' for key, value in sorted_timers.items()])
-            txt_msg = '\n'.join([f'{key}:{value}'for key,value in sorted_timers.items()])
-            sb.write_to_timers_txt(txt_msg)
-            await response_channel.send(timers_msg)
+    if sorted_timers:
+        timers_msg = '\n'.join(
+            [f'> {value} <t:{key}:f> in <t:{key}:R> ID: {key}' for key, value in sorted_timers.items()]
+        )
+    else:
+        timers_msg = "There are no active timers."
 
+    timer_msg = None
+
+    if timer_message_id is not None:
+        try:
+            timer_msg = await response_channel.fetch_message(timer_message_id)
+        except discord.NotFound:
+            timer_msg = None
+            timer_message_id = None
+        except discord.HTTPException as e:
+            print(f"Could not fetch saved timer message: {e}")
+            timer_msg = None
+            timer_message_id = None
+
+    if timer_msg is None:
+        async for msg in response_channel.history(limit=50):
+            if msg.author.id == bot.user.id:
+                timer_msg = msg
+                timer_message_id = msg.id
+                break
+
+    if timer_msg:
+        try:
+            await timer_msg.edit(content=timers_msg)
+            return
+        except discord.NotFound:
+            timer_message_id = None
+        except discord.Forbidden:
+            print("Bot does not have permission to edit timer message.")
+            return
+        except discord.HTTPException as e:
+            print(f"Could not edit timer message: {e}")
+            timer_message_id = None
+
+    new_msg = await response_channel.send(timers_msg)
+    timer_message_id = new_msg.id
+    
 @bot.command()
 async def rem(ctx, key):
     key = int(key)
