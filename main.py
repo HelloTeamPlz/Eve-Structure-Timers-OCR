@@ -33,16 +33,24 @@ def get_old_timers(file_path):
 
 @bot.event
 async def on_ready():
-  print('the bot is ready')
-  remove_expired_timers.start()
-  response_channel = bot.get_channel(timer_response_channel)
-  file_path = 'timers.txt'
-  get_old_timers(file_path)
-  sorted_timers = dict(sorted(timer_dict_glob.items(), reverse=True))
-  timers_msg = '\n'.join([f'> {value} <t:{key}:f> in <t:{key}:R> ID: {key}' for key, value in sorted_timers.items()])
-  await response_channel.purge(limit=5)
-  await response_channel.send(timers_msg)
-  
+    print('the bot is ready')
+
+    file_path = 'timers.txt'
+    get_old_timers(file_path)
+
+    if not remove_expired_timers.is_running():
+        remove_expired_timers.start()
+
+    response_channel = bot.get_channel(timer_response_channel)
+
+    sorted_timers = dict(sorted(timer_dict_glob.items(), reverse=True))
+    timers_msg = '\n'.join(
+        [f'> {value} <t:{key}:f> in <t:{key}:R> ID: {key}' for key, value in sorted_timers.items()]
+    )
+
+    await response_channel.purge(limit=5)
+    await response_channel.send(timers_msg or "There are no active timers.")
+
 @bot.command()
 async def t(ctx, *, time):
     '''
