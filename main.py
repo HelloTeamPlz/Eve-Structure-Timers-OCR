@@ -34,6 +34,7 @@ def get_old_timers(file_path):
 
 @bot.event
 async def on_ready():
+    global timer_message_id
     print('the bot is ready')
 
     file_path = 'timers.txt'
@@ -249,7 +250,7 @@ async def remove_expired_timers():
 
     new_msg = await response_channel.send(timers_msg)
     timer_message_id = new_msg.id
-    
+
 @bot.command()
 async def rem(ctx, key):
     key = int(key)
