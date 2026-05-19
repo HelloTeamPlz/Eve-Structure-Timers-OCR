@@ -156,7 +156,7 @@ async def update_timer_message():
         green_lines = []
         blue_lines = []
 
-        for key, value in sorted(timer_dict_glob.items()):
+        for key, value in sorted(timer_dict_glob.items(), reverse=True):
             seconds_left = key - now
 
             if seconds_left <= 0:
