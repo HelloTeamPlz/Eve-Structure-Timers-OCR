@@ -35,6 +35,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=truenas
             type=sha
             type=ref,event=tag
 
@@ -48,5 +49,6 @@ jobs:
           pull: true
           provenance: false
           sbom: false
+          outputs: type=image,oci-mediatypes=false,compression=gzip,force-compression=true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
