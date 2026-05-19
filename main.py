@@ -20,14 +20,23 @@ TIMER_MESSAGE_ID_FILE = "timer_message_id.txt"
 
 timer_dict_glob = {}
 timer_message_id = None
+
+timer_message_ids = {
+    "red": None,
+    "green": None,
+    "blue": None,
+}
+
 timer_lock = asyncio.Lock()
 
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
 
-def save_timer_message_id(message_id):
+def save_timer_message_id(message_id=None):
     with open(TIMER_MESSAGE_ID_FILE, "w") as file:
-        file.write(str(message_id))
+        for key, value in timer_message_ids.items():
+            if value:
+                file.write(f"{key}={value}\n")
 
 
 def load_timer_message_id():
@@ -35,12 +44,27 @@ def load_timer_message_id():
 
     try:
         with open(TIMER_MESSAGE_ID_FILE, "r") as file:
-            timer_message_id = int(file.read().strip())
+            content = file.read().strip()
+
+        if not content:
+            return
+
+        if "=" in content:
+            for line in content.splitlines():
+                parts = line.split("=", 1)
+                if len(parts) == 2:
+                    key, value = parts
+                    if key in timer_message_ids:
+                        timer_message_ids[key] = int(value)
+        else:
+            old_message_id = int(content)
+            timer_message_id = old_message_id
+            timer_message_ids["red"] = old_message_id
+
     except FileNotFoundError:
-        timer_message_id = None
+        pass
     except Exception as e:
         print(f"Could not load timer message ID: {e}")
-        timer_message_id = None
 
 
 def get_old_timers(file_path):
@@ -55,7 +79,6 @@ def get_old_timers(file_path):
                     ts = int(parts[0])
                     name = parts[1]
 
-                    # Only reload timers that are not more than 1 hour expired
                     if ts + 3600 > now:
                         timer_dict_glob[ts] = name
 
@@ -64,9 +87,56 @@ def get_old_timers(file_path):
     except Exception as e:
         print(f"Could not load old timers: {e}")
 
-async def update_timer_message():
-    global timer_message_id
 
+def build_timer_embed(title, lines, color):
+    description = "\n".join(lines)
+
+    if not description:
+        description = "No timers in this category."
+
+    if len(description) > 4000:
+        description = description[:3900] + "\n\nToo many timers to show."
+
+    return discord.Embed(
+        title=title,
+        description=description,
+        color=color
+    )
+
+
+async def send_or_edit_timer_embed(channel, key, embed):
+    msg_id = timer_message_ids.get(key)
+    msg = None
+
+    if msg_id is not None:
+        try:
+            msg = await channel.fetch_message(msg_id)
+        except discord.NotFound:
+            timer_message_ids[key] = None
+        except discord.HTTPException as e:
+            print(f"Could not fetch {key} timer message: {e}")
+            timer_message_ids[key] = None
+
+    if msg is not None:
+        try:
+            await msg.edit(content=None, embed=embed)
+            save_timer_message_id()
+            return
+        except discord.NotFound:
+            timer_message_ids[key] = None
+        except discord.Forbidden:
+            print(f"Bot does not have permission to edit {key} timer message.")
+            return
+        except discord.HTTPException as e:
+            print(f"Could not edit {key} timer message: {e}")
+            timer_message_ids[key] = None
+
+    new_msg = await channel.send(embed=embed)
+    timer_message_ids[key] = new_msg.id
+    save_timer_message_id()
+
+
+async def update_timer_message():
     async with timer_lock:
         response_channel = bot.get_channel(timer_response_channel)
 
@@ -80,53 +150,48 @@ async def update_timer_message():
         )
         sb.write_to_timers_txt(txt_msg)
 
-        if sorted_timers:
-            timers_msg = "\n".join(
-                [
-                    f"> {value} <t:{key}:f> in <t:{key}:R> ID: {key}"
-                    for key, value in sorted_timers.items()
-                ]
-            )
-        else:
-            timers_msg = "There are no active timers."
+        now = sb.unix_time_now()
 
-        timer_msg = None
+        red_lines = []
+        green_lines = []
+        blue_lines = []
 
-        if timer_message_id is not None:
-            try:
-                timer_msg = await response_channel.fetch_message(timer_message_id)
-            except discord.NotFound:
-                timer_message_id = None
-            except discord.HTTPException as e:
-                print(f"Could not fetch timer message: {e}")
-                timer_message_id = None
+        for key, value in sorted(timer_dict_glob.items()):
+            seconds_left = key - now
 
-        if timer_msg is None:
-            async for msg in response_channel.history(limit=50):
-                if msg.author.id == bot.user.id:
-                    if "ID:" in msg.content or "There are no active timers." in msg.content:
-                        timer_msg = msg
-                        timer_message_id = msg.id
-                        save_timer_message_id(timer_message_id)
-                        break
+            if seconds_left <= 0:
+                continue
 
-        if timer_msg:
-            try:
-                await timer_msg.edit(content=timers_msg)
-                save_timer_message_id(timer_msg.id)
-                return
-            except discord.NotFound:
-                timer_message_id = None
-            except discord.Forbidden:
-                print("Bot does not have permission to edit timer message.")
-                return
-            except discord.HTTPException as e:
-                print(f"Could not edit timer message: {e}")
-                timer_message_id = None
+            line = f"{value} <t:{key}:f> <t:{key}:R> ID: {key}"
 
-        new_msg = await response_channel.send(timers_msg)
-        timer_message_id = new_msg.id
-        save_timer_message_id(timer_message_id)
+            if seconds_left < 12 * 60 * 60:
+                red_lines.append(line)
+            elif seconds_left < 24 * 60 * 60:
+                green_lines.append(line)
+            else:
+                blue_lines.append(line)
+
+        red_embed = build_timer_embed(
+            "Critical Timers",
+            red_lines,
+            discord.Color.red()
+        )
+
+        green_embed = build_timer_embed(
+            "Upcoming Timers",
+            green_lines,
+            discord.Color.green()
+        )
+
+        blue_embed = build_timer_embed(
+            "Future Timers",
+            blue_lines,
+            discord.Color.blue()
+        )
+        await send_or_edit_timer_embed(response_channel, "blue", blue_embed)
+        await send_or_edit_timer_embed(response_channel, "green", green_embed)
+        await send_or_edit_timer_embed(response_channel, "red", red_embed)
+        
 
 
 @bot.event

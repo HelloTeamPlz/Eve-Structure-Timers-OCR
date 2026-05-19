@@ -1,8 +1,11 @@
 services:
-  pochbot:
+  structure_bot:
     image: ghcr.io/helloteamplz/eve-structure-timers-ocr:latest
     container_name: structure_bot
     restart: unless-stopped
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     environment:
       - discbot=${discbot}
       - channel_id=${channel_id}
