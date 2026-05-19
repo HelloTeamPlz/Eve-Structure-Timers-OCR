@@ -2,7 +2,7 @@ name: Build and publish Docker image to GHCR
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "master"]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -25,17 +25,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-        - name: Set lowercase image name
-          run: |
-            echo "IMAGE_NAME=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+      - name: Set lowercase image name
+        run: |
+          echo "IMAGE_NAME=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
-        - name: Build image
-          run: |
-            docker build --pull --no-cache \
-              -t $IMAGE_NAME:latest \
-              -t $IMAGE_NAME:truenas .
+      - name: Build image
+        run: |
+          docker build --pull --no-cache \
+            -t $IMAGE_NAME:latest \
+            -t $IMAGE_NAME:truenas .
 
-        - name: Push image
-          run: |
-            docker push $IMAGE_NAME:latest
-            docker push $IMAGE_NAME:truenas
+      - name: Push image
+        run: |
+          docker push $IMAGE_NAME:latest
+          docker push $IMAGE_NAME:truenas
