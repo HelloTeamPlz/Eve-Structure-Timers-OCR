@@ -13,6 +13,7 @@ permissions:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,7 +28,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Docker metadata (tags/labels)
+      - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -42,5 +43,8 @@ jobs:
         with:
           context: .
           push: true
+          platforms: linux/amd64
+          no-cache: true
+          pull: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
