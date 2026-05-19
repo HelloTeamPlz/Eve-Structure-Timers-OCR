@@ -46,5 +46,7 @@ jobs:
           platforms: linux/amd64
           no-cache: true
           pull: true
+          provenance: false
+          sbom: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
