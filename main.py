@@ -198,6 +198,31 @@ async def update_timer_message():
 async def on_ready():
     print("the bot is ready")
 
+    response_channel = bot.get_channel(timer_response_channel)
+
+    if response_channel is None:
+        response_channel = await bot.fetch_channel(timer_response_channel)
+
+    deleted = 0
+
+    async for msg in response_channel.history(limit=20):
+        if msg.author.id == bot.user.id:
+            try:
+                await msg.delete()
+                deleted += 1
+            except Exception as e:
+                print(f"Could not delete message: {e}")
+
+            if deleted >= 10:
+                break
+
+    global timer_message_ids
+    timer_message_ids = {
+        "red": None,
+        "green": None,
+        "blue": None,
+    }
+
     load_timer_message_id()
     get_old_timers(TIMERS_FILE)
 
@@ -205,7 +230,6 @@ async def on_ready():
 
     if not remove_expired_timers.is_running():
         remove_expired_timers.start()
-
 
 @bot.command()
 async def t(ctx, *, time):
@@ -338,9 +362,6 @@ async def remove_expired_timers():
         if key + 3600 < current_unix_time
     ]
 
-    if not keys_to_remove:
-        return
-
     for key in keys_to_remove:
         timer_dict_glob.pop(key, None)
 
@@ -350,6 +371,43 @@ async def remove_expired_timers():
 @remove_expired_timers.error
 async def remove_expired_timers_error(error):
     print(f"remove_expired_timers error: {error}")
+
+@bot.command()
+async def export_timers(ctx):
+    now = sb.unix_time_now()
+
+    active_timers = {
+        key: value
+        for key, value in sorted(timer_dict_glob.items())
+        if key + 3600 > now
+    }
+
+    if not active_timers:
+        await ctx.send("No active timers to export.", delete_after=30)
+        return
+
+    export_text = "\n".join(
+        [f"{key}:{value}" for key, value in active_timers.items()]
+    )
+
+    if len(export_text) <= 1900:
+        await ctx.send(f"```text\n{export_text}\n```")
+    else:
+        chunks = []
+        current_chunk = ""
+
+        for line in export_text.splitlines():
+            if len(current_chunk) + len(line) + 1 > 1800:
+                chunks.append(current_chunk)
+                current_chunk = line
+            else:
+                current_chunk += f"\n{line}" if current_chunk else line
+
+        if current_chunk:
+            chunks.append(current_chunk)
+
+        for chunk in chunks:
+            await ctx.send(f"```text\n{chunk}\n```")    
 
 
 def main():
