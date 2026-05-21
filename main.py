@@ -189,10 +189,11 @@ async def update_timer_message():
             discord.Color.blue()
         )
         await send_or_edit_timer_embed(response_channel, "blue", blue_embed)
+        await asyncio.sleep(1)
         await send_or_edit_timer_embed(response_channel, "green", green_embed)
+        await asyncio.sleep(1)
         await send_or_edit_timer_embed(response_channel, "red", red_embed)
-        
-
+        await asyncio.sleep(1)
 
 @bot.event
 async def on_ready():
@@ -353,7 +354,7 @@ async def clear_timers(ctx):
     await ctx.send("All timers cleared.", delete_after=20)
 
 
-@tasks.loop(seconds=5)
+@tasks.loop(seconds=15)
 async def remove_expired_timers():
     current_unix_time = sb.unix_time_now()
 
@@ -362,10 +363,17 @@ async def remove_expired_timers():
         if key + 3600 < current_unix_time
     ]
 
-    for key in keys_to_remove:
-        timer_dict_glob.pop(key, None)
+    removed_any = False
 
-    await update_timer_message()
+    for key in sorted(keys_to_remove):
+        timer_dict_glob.pop(key, None)
+        removed_any = True
+
+    if removed_any:
+        await asyncio.sleep(1)
+
+        # Update embeds/messages in order
+        await update_timer_message()
 
 
 @remove_expired_timers.error
